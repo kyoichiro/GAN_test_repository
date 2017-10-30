@@ -1,3 +1,5 @@
+#coding:utf-8
+
 import numpy as np
 import chainer
 from chainer import Function, Variable
@@ -6,9 +8,12 @@ from chainer import Link, Chain, ChainList
 import chainer.functions as F
 import chainer.links as L
 from sklearn.datasets import fetch_mldata
-import matplotlib as plt
+
+import matplotlib.pyplot as plt
 import gzip
 import sys
+
+N = 60000 
 
 class Generater(Chain):
 	def __init__(self):
@@ -58,38 +63,42 @@ if __name__ == "__main__":
 	#reload(sys)
 	#sys.setdefaultencoding('utf8')
 
-	#mnist = fetch_mldata('MNIST original', data_home="./MNIST")
-	with gzip.open('/Users/admin/Desktop/MNIST/train-images-idx3-ubyte.gz', 'rb') as f:
-		mnist = f.read()
+	print("start:import MNIST")
 
-	print(type(mnist))
-	print(len(mnist))
+	mnist = fetch_mldata('MNIST original', data_home=".")
+	#with gzip.open('/Users/admin/Desktop/MNIST/train-images-idx3-ubyte.gz', 'rb') as f:
+		#mnist = f.read()
 
-	#mnist = str(mnist)
+	print("end:import MNIST")
 
-	# mnist.data : 70,000件の28x28=784次元ベクトルデータ
-	#mnist = mnist.data.astype(np.float32)
-	#mnist.data /= 255  # 正規化
-	mnist = np.array(mnist)
-	mnist = mnist.astype(np.float32)
-	mnist /= 255
+	print(type(mnist.data))
+	print(len(mnist.data))
 
+	#mnist.data : 70,000件の28x28=784次元ベクトルデータ
+	mnist = mnist.data.astype(np.float32)
+	mnist /= 255  # 正規化
+	
 	#X = mnist.data
 	X = mnist
+	X = X.reshape(70000,28,28)
 
 	#print(type(X))
 	#print(len(X))
 
-	plt.figure(figsize = (15, 15))   
+	plt.figure(figsize = (28, 28))
+	print(len(X[0])) 
 	
-	for i in range(10): 
-	    plt.subplot(10,10,i)
-	    X = X.reshape(28,28)
-	    X = X[::-1]
-	    plt.xlim(0,27)
-	    plt.ylim(0,27)
-	    plt.imshow(X[i])
-	    plt.gray()
+	cnt=0
+
+	for i in np.random.permutation(N)[:100]:
+		cnt+=1
+		plt.subplot(10,10,cnt)
+		X[i] = X[i][::-1] #inverse of number
+		plt.xlim(0,27)
+		plt.ylim(0,27)
+		plt.imshow(X[i])
+		plt.pcolor(X[i])
+		plt.gray()
 	plt.show()
 
 
