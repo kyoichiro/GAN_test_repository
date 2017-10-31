@@ -15,16 +15,16 @@ import sys
 
 N = 60000 
 
-class Generater(Chain):
+class generator(Chain):
 	def __init__(self):
-		super(Generater, self).__init__(
+		super(generator, self).__init__(
 			gl1=L.Linear(4,3),
 			gl2=L.Linear(3,4),
 		)
 
-	def __call__(self, x, y):
+	def __call__(self, x, m):
 		fv = self.fwd(x)
-		loss = F.mean_squared_error(fv, y)
+		loss = log(1-Discriminator.fwd(fv))/m
 		return loss
 
 	def fwd(self, x):
@@ -33,32 +33,32 @@ class Generater(Chain):
 		return h2
 
 
-class Discriminater(Chain):
+class Discriminator(Chain):
 	def __init__(self):
-		super(Discriminater, self).__init__(
+		super(Discriminator, self).__init__(
 			dl1=L.Linear(4,3),
 			dl2=L.Linear(3,1),
 		)
 
-	def __call__(self, x, y):
+	def __call__(self, x, m):
 		fv = self.fwd(x)
-		loss = F.mean_squared_error(fv, y)
+		loss = log(fv)+log(1-Discriminator.fwd(generator.fwd(x)))/m
 		return  loss
 
 	def fwd(self, x):
 		h1=F.sigmoid(self.dl1(x))
 		h2=F.sigmoid(self.dl2(h1))
-
+		return h2
 
 if __name__ == "__main__":
 
 	#setup models 
-	Generater = Generater()
-	Discriminater = Discriminater()
+	generator = generator()
+	Discriminator = Discriminator()
 	opt_gene = optimizers.SGD()
 	opt_dis = optimizers.SGD()
-	opt_gene.setup(Generater)
-	opt_dis.setup(Discriminater)
+	opt_gene.setup(generator)
+	opt_dis.setup(Discriminator)
 
 	#reload(sys)
 	#sys.setdefaultencoding('utf8')
@@ -89,7 +89,7 @@ if __name__ == "__main__":
 	print(len(X[0])) 
 	
 	cnt=0
-
+	'''
 	for i in np.random.permutation(N)[:100]:
 		cnt+=1
 		plt.subplot(10,10,cnt)
@@ -100,6 +100,8 @@ if __name__ == "__main__":
 		plt.pcolor(X[i])
 		plt.gray()
 	plt.show()
+	'''
+	print("End program")
 
 
 
