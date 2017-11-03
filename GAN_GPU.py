@@ -52,9 +52,9 @@ class Discriminator(Chain):
 		)
 
 	def __call__(self, x):
-		h1=F.dropout(F.maxout(self.dl1(x))) 
-		h2=F.dropout(F.maxout(self.dl2(h1)))
-		y=F.dropout(F.sigmoid(self.dl3(h2)))
+		h1=F.dropout(F.relu(self.dl1(x))) 
+		h2=F.dropout(F.relu(self.dl2(h1)))
+		y=F.dropout(F.relu(self.dl3(h2)))
 		return y
 
 if __name__ == "__main__":
@@ -67,6 +67,12 @@ if __name__ == "__main__":
 	opt_gene.setup(Generator)
 	opt_dis.setup(Discriminator)
 
+	gpu_device = 0
+	cuda.get_device(gpu_device).use()
+	Generator.to_gpu(gpu_device)
+	Discriminator.to_gpu(gpu_device)
+	xp = cuda.cupy
+
 	test_loss = []
 	test_loss_gene  = []
 
@@ -74,25 +80,30 @@ if __name__ == "__main__":
 	dl2_W = []
 	dl3_W = []
 
+	#reload(sys)
+	#sys.setdefaultencoding('utf8')
+
 	print("start:import MNIST")
 
 	mnist = fetch_mldata('MNIST original', data_home=".")
+	#with gzip.open('/Users/admin/Desktop/MNIST/train-images-idx3-ubyte.gz', 'rb') as f:
+		#mnist = f.read()
 
 	print("end:import MNIST")
 
 	#mnist.data : 70,000件の28x28=784次元ベクトルデータ
-	mnist.data = mnist.data.astype(np.float32)
+	mnist.data = mnist.data.astype(xp.float32)
 	mnist.data /= 255  # 正規化
-	mnist.target = mnist.target.astype(np.int32)
+	mnist.target = mnist.target.astype(xp.int32)
 
 	x_train, x_test = np.split(mnist.data,   [N])
 	y_train, y_test = np.split(mnist.target, [N])
 	N_test = y_test.size
 
-	x_train = np.array(x_train)
-	x_test = np.array(x_test)
-	y_train = np.array(y_train)
-	y_test = np.array(y_test)
+	x_train = xp.array(x_train)
+	x_test = xp.array(x_test)
+	y_train = xp.array(y_train)
+	y_test = xp.array(y_test)
 
 	# Learning loop
 	for epoch in range(1, n_epoch+1):
@@ -110,20 +121,20 @@ if __name__ == "__main__":
 			y_batch = y_train[perm[i:i+batchsize]]
 			x_batch, y_batch = Variable(x_batch), Variable(y_batch)
 
-			x_noise = np.array([[np.random.uniform(-1, 0, 1) for i in range(g_input_units)] for i in range(batchsize)]).astype(np.float32)
+			x_noise = xp.array([[np.random.uniform(-1, 0, 1) for i in range(g_input_units)] for i in range(batchsize)]).astype(xp.float32)
 			x_noise = Variable(x_noise)
 
 			# 勾配を初期化
 			Generator.zerograds()
 			Discriminator.zerograds()
 
-			#Generatorへの入力
+
+			#Generatorへの入力(Make image)
 			x_generator = Generator(x_noise)
 			x_image = cuda.to_cpu(x_generator.data)
-			print(type(x_image))
 			x_image = x_image.reshape(100,28,28)
-			#print(type(x_image[0]))
             
+            #Input each Network
 			Dis = Discriminator(x_batch)
 			Dis_from_gene = Discriminator(x_generator)
 
@@ -131,25 +142,16 @@ if __name__ == "__main__":
 			loss_dis=0
 			loss_gene=0
 
-			for i in range(batchsize):
-				if Dis.data[i][0] > 0 and Dis_from_gene.data[i][0] < 1:
-					loss_dis += log(Dis.data[i][0])+log(1-Dis_from_gene.data[i][0])
-				else :
-					loss_dis += log(1)+log(1)
-			loss_dis /= (batchsize*2)
-
+			loss_dis = F.sigmoid_cross_entropy(Dis, xp.ones((batchsize,output_units), dtype = xp.int32))/batchsize + F.sigmoid_cross_entropy(Dis_from_gene, xp.zeros((batchsize, output_units),dtype = xp.int32))/batchsize 
 			# 誤差逆伝播で勾配を計算
-			loss_dis = Variable(np.array(loss_dis))
 			loss_dis.backward()
 			opt_dis.update()
 
 			if i%k == 0:
-				for j in range(batchsize):
-					loss_gene -= log(Dis_from_gene.data[j][0])/batchsize
-				loss_gene = Variable(np.array(loss_gene))
+				loss_gene = F.sigmoid_cross_entropy(Dis_from_gene, xp.zeros((batchsize, output_units), dtype = xp.int32))/batchsize
+				#loss_gene = Variable(np.array(loss_gene))
 				loss_gene.backward()
 				opt_gene.update()
-			#opt_gene.update()
 
 			#train_loss.append(loss.data)
 			#train_acc.append(acc.data)
@@ -158,9 +160,9 @@ if __name__ == "__main__":
 
 		# 訓練データの誤差と、正解精度を表示
 		print ("train mean loss={}".format(loss_dis.data / N))
-		plt.imshow(x_image[0])
+		plt.imshow(x_image[0]*255)
 		plt.gray()
-		plt.show()
+		plt.savefig("./Epoch{}".format(epoch))
 
 		# evaluation
 		# テストデータで誤差と、正解精度を算出し汎化性能を確認
