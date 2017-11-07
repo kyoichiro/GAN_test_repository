@@ -1,5 +1,6 @@
 #coding:utf-8
 
+import argparse
 import numpy as np
 import chainer
 from chainer import Function, Variable
@@ -59,6 +60,10 @@ class Discriminator(Chain):
 
 if __name__ == "__main__":
 
+	parser = argparse.ArgumentParser()
+	parser.add_argument('--gpu', '-g', type=int, default=-1,help='GPU ID (negative value indicates CPU)')
+	args = parser.parse_args()
+
 	#setup models 
 	Generator = Generator()
 	Discriminator = Discriminator()
@@ -67,11 +72,14 @@ if __name__ == "__main__":
 	opt_gene.setup(Generator)
 	opt_dis.setup(Discriminator)
 
-	gpu_device = 0
-	cuda.get_device(gpu_device).use()
-	Generator.to_gpu(gpu_device)
-	Discriminator.to_gpu(gpu_device)
-	xp = cuda.cupy
+	if args.gpu >=0:
+		gpu_device = 0
+		cuda.get_device(gpu_device).use()
+		Generator.to_gpu(gpu_device)
+		Discriminator.to_gpu(gpu_device)
+		xp = cuda.cupy
+	else:
+		xp = np
 
 	test_loss = []
 	test_loss_gene  = []
@@ -142,13 +150,13 @@ if __name__ == "__main__":
 			loss_dis=0
 			loss_gene=0
 
-			loss_dis = F.sigmoid_cross_entropy(Dis, xp.ones((batchsize,output_units), dtype = xp.int32))/batchsize + F.sigmoid_cross_entropy(Dis_from_gene, xp.zeros((batchsize, output_units),dtype = xp.int32))/batchsize 
+			loss_dis = F.sum(F.sigmoid_cross_entropy(Dis, xp.ones((batchsize,output_units), dtype = xp.int32)))/batchsize + F.sum(F.sigmoid_cross_entropy((1-Dis_from_gene), xp.zeros((batchsize, output_units),dtype = xp.int32)))/batchsize 
 			# 誤差逆伝播で勾配を計算
 			loss_dis.backward()
 			opt_dis.update()
 
 			if i%k == 0:
-				loss_gene = F.sigmoid_cross_entropy(Dis_from_gene, xp.zeros((batchsize, output_units), dtype = xp.int32))/batchsize
+				loss_gene -= F.sum(F.sigmoid_cross_entropy((1-Dis_from_gene), xp.zeros((batchsize, output_units), dtype = xp.int32)))/batchsize
 				#loss_gene = Variable(np.array(loss_gene))
 				loss_gene.backward()
 				opt_gene.update()
