@@ -45,7 +45,7 @@ class Generator(Chain):
 	def __call__(self, x):
 		h1=F.dropout(F.leaky_relu(self.bn1(self.gl1(x))))
 		h2=F.dropout(F.leaky_relu(self.bn2(self.gl2(h1))))
-		y=F.dropout(F.leaky_relu(self.bn3(self.gl3(h2))))
+		y=F.dropout(F.sigmoid(self.bn3(self.gl3(h2))))
 		return y
 
 class Discriminator(Chain):
@@ -158,6 +158,7 @@ if __name__ == "__main__":
 			loss_dis.backward()
 			opt_dis.update()
 
+			#Generatorの学習
 			if i%k == 0:
 				loss_gene -= F.sigmoid_cross_entropy((1-Dis_from_gene), xp.ones((batchsize, output_units), dtype = xp.int32))/batchsize
 				loss_gene.backward()
