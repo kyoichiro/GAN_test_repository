@@ -185,7 +185,7 @@ if __name__ == "__main__":
 	
 	cnt=0
 
-	test_loss = cuda.to_cpu(test_loss.data)
+	#test_loss = cuda.to_cpu(test_loss)
     
 	# 精度と誤差をグラフ描画
 	plt.figure(figsize=(8,6))
