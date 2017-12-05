@@ -17,53 +17,65 @@ import sys
 
 N = 60000
 k = 1
-n_epoch = 20
+n_epoch = 1000
 batchsize = 100
 
 input_units = 784
-n_units = 240
-n2_units = 240
+n_units = 256
+n2_units = 64
 output_units = 1
 
 g_input_units = 100
-g_n_units = 1200
-g_n2_units = 1200
+g_n_units = 256 #1200
+g_n2_units = 512 #1200
 g_output_units = 784
 
 class Generator(Chain):
 	def __init__(self):
 		super(Generator, self).__init__(
 			gl1=L.Linear(g_input_units, g_n_units),
-			gl2=L.Linear(g_n_units, g_n2_units),
-			gl3=L.Linear(g_n2_units, g_output_units),
+			#gl2=L.Linear(g_n_units, g_n2_units),
+			#gl3=L.Linear(g_n2_units, g_output_units),
+			gl2=L.Linear(g_n_units, g_output_units),
 
-			bn1 = L.BatchNormalization(size=1200, use_gamma=False),
-			bn2 = L.BatchNormalization(size=1200, use_gamma=False),
-			bn3 = L.BatchNormalization(size=784, use_gamma=False),
+			bn1 = L.BatchNormalization(size=g_n_units, use_gamma=False),
+			bn2 = L.BatchNormalization(size=g_n2_units, use_gamma=False),
+			bn3 = L.BatchNormalization(size=g_output_units, use_gamma=False),
 		)
 
 	def __call__(self, x):
-		h1=F.dropout(F.leaky_relu(self.bn1(self.gl1(x))))
-		h2=F.dropout(F.leaky_relu(self.bn2(self.gl2(h1))))
-		y=F.dropout(F.sigmoid(self.bn3(self.gl3(h2))))
+		h1=F.relu(self.bn1(self.gl1(x)))
+		#h2=F.relu(self.bn2(self.gl2(h1)))
+		y=F.dropout(F.sigmoid(self.gl2(h1))) #sigmoidによって画像が荒くなる可能性あり
 		return y
 
 class Discriminator(Chain):
 	def __init__(self):
 		super(Discriminator, self).__init__(
 			dl1=L.Linear(input_units, n_units),
-			dl2=L.Linear(n_units, n2_units),
-			dl3=L.Linear(n2_units, output_units),
+			#dl2=L.Linear(n_units, n2_units),
+			#dl3=L.Linear(n2_units, output_units),
+			dl2=L.Linear(n_units, output_units),
 
-			bn1 = L.BatchNormalization(size=240, use_gamma=False),
-			bn2 = L.BatchNormalization(size=240, use_gamma=False),
+			bn1 = L.BatchNormalization(size=n_units, use_gamma=False),
+			bn2 = L.BatchNormalization(size=n2_units, use_gamma=False),
 		)
 
 	def __call__(self, x):
-		h1=F.dropout(F.leaky_relu(self.bn1(self.dl1(x))))
-		h2=F.dropout(F.leaky_relu(self.bn2(self.dl2(h1))))
-		y=F.dropout(F.leaky_relu(self.dl3(h2)))
+		h1=F.leaky_relu(self.bn1(self.dl1(x)))
+		#h2=F.leaky_relu(self.bn2(self.dl2(h1)))
+		y=F.leaky_relu(self.dl2(h1))
 		return y
+
+def draw_digit3(data, n):
+	plt.subplot(10, 10, n)
+	data = data[::-1]
+	plt.xlim(0, 27)
+	plt.ylim(0, 27)
+	plt.pcolor(data)
+	plt.gray()
+	plt.tick_params(labelbottom = "off")
+	plt.tick_params(labelleft = "off")
 
 if __name__ == "__main__":
 
@@ -132,18 +144,17 @@ if __name__ == "__main__":
 			y_batch = y_train[perm[i:i+batchsize]]
 			x_batch, y_batch = Variable(x_batch), Variable(y_batch)
 
-			x_noise = xp.array([[np.random.uniform(0, 1, batchsize)] for i in range(batchsize)]).astype(xp.float32)
+			x_noise = xp.array([[np.random.uniform(-1, 1, g_input_units)] for i in range(batchsize)]).astype(xp.float32) #分布は[-1,1]が良い(経験)
 			x_noise = Variable(x_noise)
 
 			# 勾配を初期化
 			Generator.zerograds()
 			Discriminator.zerograds()
 
-
 			#Generatorへの入力(Make image)
 			x_generator = Generator(x_noise)
 			x_image = cuda.to_cpu(x_generator.data)
-			x_image = x_image.reshape(100,28,28)
+			x_image = x_image.reshape(batchsize,28,28)
             
             #Input each Network
 			Dis = Discriminator(x_batch)
@@ -153,47 +164,51 @@ if __name__ == "__main__":
 			loss_dis=0
 			loss_gene=0
 
-			loss_dis = F.sigmoid_cross_entropy(Dis, xp.ones((batchsize,output_units), dtype = xp.int32))/batchsize + F.sigmoid_cross_entropy((1-Dis_from_gene), xp.ones((batchsize, output_units),dtype = xp.int32))/batchsize 
+			loss_dis = F.sum(F.sigmoid_cross_entropy(Dis, xp.ones((batchsize,output_units), dtype = xp.int32), normalize = False))/batchsize + F.sum(F.sigmoid_cross_entropy((1-Dis_from_gene), xp.ones((batchsize, output_units), dtype = xp.int32), normalize = False))/batchsize 
 			# 誤差逆伝播で勾配を計算
 			loss_dis.backward()
 			opt_dis.update()
 
 			#Generatorの学習
 			if i%k == 0:
-				loss_gene -= F.sigmoid_cross_entropy((1-Dis_from_gene), xp.ones((batchsize, output_units), dtype = xp.int32))/batchsize
+				loss_gene = F.sum(F.sigmoid_cross_entropy(Dis_from_gene, xp.ones((batchsize, output_units), dtype = xp.int32), normalize = False))/batchsize
+				#loss_gene -= F.sum(F.sigmoid_cross_entropy((1-Dis_from_gene), xp.ones((batchsize, output_units), dtype = xp.int32), normalize = False))/batchsize
 				loss_gene.backward()
 				opt_gene.update()
 
 		# 訓練データの誤差と、正解精度を表示
-		print ("train mean loss={}".format(loss_dis.data / N))
-		plt.imshow(x_image[0]*255)
-		plt.gray()
-		plt.savefig("./Epoch{}".format(epoch))
+		print ("train mean loss={}".format(loss_dis.data))
+		print ("generator mean loss={}".format(loss_gene.data))
+		#plt.imshow(x_image[0]*255)
+		#plt.gray()
+		#plt.savefig("./GAN_2-result/Epoch{}".format(epoch))
 
-		# evaluation
-		# テストデータで誤差と、正解精度を算出し汎化性能を確認
-		sum_accuracy = 0
-		sum_loss     = 0
+		#evaluation
+		#テストデータで誤差と、正解精度を算出し汎化性能
 
 		test_loss.append(loss_dis.data)
 		test_loss_gene.append(loss_gene.data)
 
-		# 学習したパラメーターを保存
-		dl1_W.append(Discriminator.dl1.W)
-		dl2_W.append(Discriminator.dl2.W)
-		dl3_W.append(Discriminator.dl3.W)
-	
-	cnt=0
+		plt.figure(figsize = (15, 15))
 
-	#test_loss = cuda.to_cpu(test_loss)
+		cnt = 0
+		for idx in np.random.permutation(batchsize)[:100]:
+			cnt += 1
+			draw_digit3(x_image[idx]*255, cnt)
+		plt.savefig("./GAN_2-result/Epoch{}".format(epoch))
+
+		# 学習したパラメーターを保存
+		#dl1_W.append(Discriminator.dl1.W)
+		#dl2_W.append(Discriminator.dl2.W)
+		#dl3_W.append(Discriminator.dl3.W)
     
 	# 精度と誤差をグラフ描画
 	plt.figure(figsize=(8,6))
-	plt.plot(range(len(test_loss)),test_loss)
-	plt.plot(range(len(test_loss_gene)), test_loss_gene)
+	plt.plot(range(len(test_loss)),test_loss,color = red)
+	plt.plot(range(len(test_loss_gene)), test_loss_gene, color = blue)
 	plt.legend(["train_acc","test_acc"],loc=4)
 	plt.title("Accuracy of digit recognition.")
 	plt.plot()
-	plt.show()
+	plt.savefig("./GAN_2-reslut/Train_error")
 
 	print("End program")
