@@ -46,7 +46,8 @@ class Generator(Chain):
 	def __call__(self, x):
 		h1=F.relu(self.bn1(self.gl1(x)))
 		#h2=F.relu(self.bn2(self.gl2(h1)))
-		y=F.dropout(F.sigmoid(self.gl2(h1))) #sigmoidによって画像が荒くなる可能性あり
+		#y=F.dropout(F.sigmoid(self.gl2(h1))) #dropoutによって画像が荒くなる可能性あり
+		y=F.sigmoid(self.gl2(h1))
 		return y
 
 class Discriminator(Chain):
